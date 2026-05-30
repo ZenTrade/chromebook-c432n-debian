@@ -1,0 +1,17 @@
+/* Pager workspace visibility */
+wnck-pager {
+    -wnck-pager-border-color: #666666;
+    -wnck-pager-background-color: #333333;
+}
+
+/* Menu item spacing - match macOS comfortable density */
+menuitem,
+modelbutton.flat {
+    min-height: 28px;
+    padding: 4px 10px;
+}
+
+/* Menu container padding */
+menu {
+    padding: 8px;
+}

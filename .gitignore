@@ -1,0 +1,28 @@
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 第三方二进制包（用户自行下载最新版）
+*.deb
+*.xpi
+*.rpm
+*.dmg
+*.exe
+*.msi
+
+# 临时文件
+*.tmp
+*.bak
+*~
+
+# NHLT 解析工具的输入文件
+tmp/
+
+# 部署/推送脚本（含 token，不应提交）
+_check_repo.py
+_git_commit.py
+_git_push.py
+push_to_github.py
+check_token.py
+create_repo.py
+fix_push.py

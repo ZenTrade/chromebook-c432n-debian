@@ -1,0 +1,15 @@
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "Preferences": {
+      "media.hardware-video-decoding.force-enabled": true,
+      "layers.gpu-process.force-enabled": true,
+      "gfx.webrender.all": true,
+      "widget.dmabuf.force-enabled": true
+    }
+  }
+}

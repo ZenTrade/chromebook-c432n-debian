@@ -1,0 +1,12 @@
+[Unit]
+Description=Chromebook Volume/Brightness Daemon
+After=pulseaudio.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/chromebook-volumed.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Chromebook Volume Restore
+Exec=/usr/local/bin/chromebook-osd.sh volume-restore
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
