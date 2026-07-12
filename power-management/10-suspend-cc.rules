@@ -1,0 +1,12 @@
+// Allow cc user to run suspend/hibernate without password prompt
+// Required by lid-watch.service which calls `systemctl suspend -i`
+polkit.addRule(function(action, subject) {
+    if (subject.user == "cc" &&
+        (action.id == "org.freedesktop.login1.suspend" ||
+         action.id == "org.freedesktop.login1.suspend-multiple-sessions" ||
+         action.id == "org.freedesktop.login1.suspend-ignore-inhibit" ||
+         action.id == "org.freedesktop.login1.hibernate" ||
+         action.id == "org.freedesktop.login1.hibernate-multiple-sessions")) {
+        return polkit.Result.YES;
+    }
+});

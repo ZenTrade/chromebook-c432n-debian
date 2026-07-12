@@ -71,6 +71,27 @@ Display 91-100% → Actual 10-100% (headphone/external headroom)
 
 ---
 
+### `power-management/` — Power Management Fix (Required for MrChromebox)
+
+Fixes lid-close suspend on Chromebooks with custom firmware. The root cause is that Chrome OS devices manage the lid switch through the Embedded Controller (EC). After flashing MrChromebox firmware, the ACPI event path for the lid switch is broken — the sensor state is readable through `/proc/acpi/button/lid/LID0/state`, but **no hardware interrupt is generated** on lid close/open. systemd-logind, xfce4-power-manager, and evtest cannot detect lid transitions.
+
+| File | Purpose |
+|------|---------|
+| `lid-watch.sh` | Polling script. Checks `/proc/acpi/button/lid/LID0/state` every 2 seconds; calls `systemctl suspend -i` on lid close. Includes duplicate-trigger protection |
+| `lid-watch.service` | systemd user service for the polling script, runs on user login |
+| `10-suspend-cc.rules` | PolKit rule allowing `cc` user to run `systemctl suspend` without password |
+
+**Deploy:**
+```bash
+sudo cp power-management/10-suspend-cc.rules /etc/polkit-1/rules.d/
+cp power-management/lid-watch.service ~/.config/systemd/user/
+cp power-management/lid-watch.sh ~/.local/bin/ && chmod +x ~/.local/bin/lid-watch.sh
+systemctl --user daemon-reload
+systemctl --user enable --now lid-watch.service
+```
+
+---
+
 ### `xfce-ui/` — XFCE UI Optimization (Recommended)
 
 Improves visual consistency and comfort of the XFCE desktop.
@@ -91,7 +112,10 @@ xfconf-query -c xsettings -p /Gtk/MonospaceFontName -s "Sarasa Fixed SC 10"
 xfconf-query -c xsettings -p /Xft/Hinting -s 1
 xfconf-query -c xsettings -p /Xft/HintStyle -s "hintslight"
 
-# Lid suspend (bypass xfce4-power-manager inhibitor lock)
+# Lid suspend
+# ⚠️ On MrChromebox firmware, this logind approach does NOT work
+#    because the lid switch does not generate hardware interrupts.
+#    Use the polling service in power-management/ instead.
 mkdir -p /etc/systemd/logind.conf.d
 cat > /etc/systemd/logind.conf.d/lid-suspend.conf << 'EOF'
 [Login]
@@ -166,6 +190,32 @@ EOF
 # GRUB_CMDLINE_LINUX_DEFAULT="quiet module_blacklist=edac_pnd2 i915.enable_lspcon=0"
 # GRUB_TIMEOUT=0
 # Then run: update-grub
+
+# CPU / Memory optimization
+# Reduce swappiness (default 60 → 10, prefer keeping apps in RAM)
+cat > /etc/sysctl.d/99-chromebook-memory.conf << 'EOF'
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+EOF
+
+# Firefox about:config tweaks for low-memory systems:
+#   browser.sessionhistory.max_total_viewers=4       (reduce tab memory)
+#   browser.sessionhistory.contentViewerTimeout=180   (faster tab unload)
+#   browser.sessionstore.interval=300000              (reduce disk writes)
+#   browser.cache.disk.capacity=51200                 (50MB disk cache)
+#   browser.cache.memory.capacity=20480               (20MB memory cache)
+#   media.hardware-video-decoding.enabled=true        (VA-API hardware decode)
+#   gfx.webrender.all=true                            (GPU-accelerated rendering)
+
+# Disable unnecessary services to reduce CPU/RAM usage
+systemctl --user disable xfce4-power-manager  # lid-watch replaces this
+systemctl --user disable xfce4-screensaver
+systemctl --user disable xfce4-notifyd        # dunst replaces this
+systemctl disable cups-browsed.service
+systemctl disable bluetooth.service            # Bluetooth not needed
+
+# Firefox: set dom.ipc.processCount=1 to reduce number of content processes
+# (for very low memory systems, trade-off: page isolation is reduced)
 ```
 
 ---
@@ -235,6 +285,30 @@ systemctl enable cleanup-caches
 apt install -y intel-media-va-driver mesa-va-drivers
 mkdir -p /usr/share/firefox-esr/distribution
 cp driver-patches/policies.json /usr/share/firefox-esr/distribution/
+```
+
+### 6. Deploy power management (lid-close suspend)
+
+```bash
+sudo cp power-management/10-suspend-cc.rules /etc/polkit-1/rules.d/
+cp power-management/lid-watch.service ~/.config/systemd/user/
+cp power-management/lid-watch.sh ~/.local/bin/ && chmod +x ~/.local/bin/lid-watch.sh
+systemctl --user daemon-reload
+systemctl --user enable --now lid-watch.service
+```
+
+### 7. (Optional) CPU / Memory optimization
+
+```bash
+# Reduce swappiness (prefer keeping apps in RAM over disk cache)
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.d/99-chromebook-memory.conf
+echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.d/99-chromebook-memory.conf
+
+# Disable services not needed on this Chromebook
+sudo systemctl disable cups-browsed.service
+sudo systemctl disable bluetooth.service
+systemctl --user disable xfce4-screensaver
+systemctl --user disable xfce4-notifyd   # dunst replaces it
 ```
 
 ## License

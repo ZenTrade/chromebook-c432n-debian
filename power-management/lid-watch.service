@@ -1,0 +1,14 @@
+[Unit]
+Description=Lid Switch Polling Service - Suspend on lid close
+Documentation=https://github.com/ZenTrade/chromebook-c432n-debian/tree/main/power-management
+# 解决 Chromebook (MrChromebox 固件) 合盖无中断事件的轮询方案
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/lid-watch.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

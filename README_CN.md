@@ -71,6 +71,27 @@
 
 ---
 
+### `power-management/` — 电源管理修复（MrChromebox 必需）
+
+修复 Chromebook 在自定义固件下的合盖待机问题。**根因**：ChromeOS 设备的合盖传感器由嵌入式控制器（EC）管理。刷了 MrChromebox 固件后，ACPI 事件通路失效——传感器状态可通过 `/proc/acpi/button/lid/LID0/state` 读取，但合盖/开盖**不产生硬件中断事件**。systemd-logind、xfce4-power-manager、evtest 都无法感知合盖动作。
+
+| 文件 | 用途 |
+|------|------|
+| `lid-watch.sh` | 轮询脚本。每 2 秒读取 `/proc/acpi/button/lid/LID0/state`，检测到 `closed` 时执行 `systemctl suspend -i`。含防重复触发保护 |
+| `lid-watch.service` | systemd 用户服务，用户登录时自动启动轮询脚本 |
+| `10-suspend-cc.rules` | PolKit 规则，允许 `cc` 用户无密码执行 `systemctl suspend` |
+
+**部署步骤：**
+```bash
+sudo cp power-management/10-suspend-cc.rules /etc/polkit-1/rules.d/
+cp power-management/lid-watch.service ~/.config/systemd/user/
+cp power-management/lid-watch.sh ~/.local/bin/ && chmod +x ~/.local/bin/lid-watch.sh
+systemctl --user daemon-reload
+systemctl --user enable --now lid-watch.service
+```
+
+---
+
 ### `xfce-ui/` — XFCE 界面优化（推荐）
 
 改善 XFCE 桌面的视觉一致性和舒适度。
@@ -91,7 +112,9 @@ xfconf-query -c xsettings -p /Gtk/MonospaceFontName -s "Sarasa Fixed SC 10"
 xfconf-query -c xsettings -p /Xft/Hinting -s 1
 xfconf-query -c xsettings -p /Xft/HintStyle -s "hintslight"
 
-# 合盖待机（绕过 xfce4-power-manager inhibitor 锁）
+# 合盖待机
+# ⚠️ MrChromebox 固件下，logind 方案无效
+#    因为合盖传感器不产生硬件中断。请使用 power-management/ 中的轮询服务。
 mkdir -p /etc/systemd/logind.conf.d
 cat > /etc/systemd/logind.conf.d/lid-suspend.conf << 'EOF'
 [Login]
@@ -166,6 +189,32 @@ EOF
 # GRUB_CMDLINE_LINUX_DEFAULT="quiet module_blacklist=edac_pnd2 i915.enable_lspcon=0"
 # GRUB_TIMEOUT=0
 # 然后运行 update-grub
+
+# CPU / 内存优化
+# 降低 swappiness（默认 60 → 10，优先将应用保留在内存中）
+cat > /etc/sysctl.d/99-chromebook-memory.conf << 'EOF'
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+EOF
+
+# Firefox about:config 低内存系统优化：
+#   browser.sessionhistory.max_total_viewers=4       （减少标签页内存）
+#   browser.sessionhistory.contentViewerTimeout=180   （加快标签页卸载）
+#   browser.sessionstore.interval=300000              （减少磁盘写入）
+#   browser.cache.disk.capacity=51200                 （50MB 磁盘缓存）
+#   browser.cache.memory.capacity=20480               （20MB 内存缓存）
+#   media.hardware-video-decoding.enabled=true        （VA-API 硬件解码）
+#   gfx.webrender.all=true                            （GPU 加速渲染）
+
+# 关闭不必要的服务，减少 CPU/内存占用
+systemctl --user disable xfce4-power-manager  # lid-watch 替代
+systemctl --user disable xfce4-screensaver
+systemctl --user disable xfce4-notifyd        # dunst 替代
+systemctl disable cups-browsed.service
+systemctl disable bluetooth.service            # 不用蓝牙
+
+# Firefox: 设置 dom.ipc.processCount=1 减少内容进程数
+# （极低内存系统，代价是降低页面隔离性）
 ```
 
 ---
@@ -235,6 +284,30 @@ systemctl enable cleanup-caches
 apt install -y intel-media-va-driver mesa-va-drivers
 mkdir -p /usr/share/firefox-esr/distribution
 cp driver-patches/policies.json /usr/share/firefox-esr/distribution/
+```
+
+### 6. 部署电源管理（合盖待机）
+
+```bash
+sudo cp power-management/10-suspend-cc.rules /etc/polkit-1/rules.d/
+cp power-management/lid-watch.service ~/.config/systemd/user/
+cp power-management/lid-watch.sh ~/.local/bin/ && chmod +x ~/.local/bin/lid-watch.sh
+systemctl --user daemon-reload
+systemctl --user enable --now lid-watch.service
+```
+
+### 7. （可选）CPU / 内存优化
+
+```bash
+# 降低 swappiness（优先将应用保留在内存中）
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.d/99-chromebook-memory.conf
+echo 'vm.vfs_cache_pressure=50' | sudo tee -a /etc/sysctl.d/99-chromebook-memory.conf
+
+# 关闭 Chromebook 上不需要的服务
+sudo systemctl disable cups-browsed.service
+sudo systemctl disable bluetooth.service
+systemctl --user disable xfce4-screensaver
+systemctl --user disable xfce4-notifyd   # dunst 替代
 ```
 
 ## License
